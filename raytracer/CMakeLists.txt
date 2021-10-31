@@ -12,6 +12,7 @@ file(GLOB_RECURSE SOURCE_FILES src/*.cu)
 file(GLOB_RECURSE HEADER_FILES src/*.cuh)
 
 add_executable(raytracer ${SOURCE_FILES} ${HEADER_FILES})
+set_property(TARGET raytracer PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(raytracer glad OpenGL::GL glfw)
 set_target_properties(raytracer PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin/${CMAKE_BUILD_TYPE}/
