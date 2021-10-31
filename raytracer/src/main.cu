@@ -38,11 +38,6 @@ int main(int argc, char* argv[])
     gfx::Display display(window_title, width, height);
     gfx::Renderer renderer(width, height);
 
-    int num_texels = width * height;
-    int num_bytes = num_texels * sizeof(float4);
-    float4* pixels;
-    CUDA_CHECK(cudaMalloc(&pixels, num_bytes));
-
     dim3 block_size(32, 32);
     dim3 grid_size = calculate_grid_size(width, height, block_size);
 
@@ -50,10 +45,10 @@ int main(int argc, char* argv[])
     {
         renderer.clear();
 
-        render<<<grid_size, block_size>>>(width, height, pixels);
-        CUDA_CHECK(cudaDeviceSynchronize());
+        float4* framebuffer = renderer.get_framebuffer();
+        render<<<grid_size, block_size>>>(width, height, framebuffer);
 
-        renderer.blit(pixels);
+        renderer.blit();
         renderer.draw();
         display.show();
     }

@@ -11,22 +11,27 @@ namespace gfx
 
         ~Renderer();
 
+        float4* get_framebuffer();
+
         void clear();
 
-        void blit(const float4* pixels);
+        void blit();
 
         void draw();
 
     private:
         int _width, _height;
 
-        cudaGraphicsResource_t _cuda_resource;
+        float4* _framebuffer = nullptr;
 
+        cudaGraphicsResource_t _cuda_resource;
         uint _shader_program;
 
         void init_texture();
         void init_shaders();
         void init_vertex_objects();
+
+        void allocate_framebuffer();
 
         const float CLEAR_COLOR[4] = {0.2f, 0.3f, 0.3f, 1.0f};
         const float VERTICES_DATA[30] = {

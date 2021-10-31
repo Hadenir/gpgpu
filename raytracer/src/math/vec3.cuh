@@ -38,7 +38,7 @@ namespace math
 
         __host__ __device__ inline float length() const;
         __host__ __device__ inline float length_sq() const;
-        __host__ __device__ void normalize();
+        __host__ __device__ inline void normalize();
 
     private:
         const float EPSILON = FLT_EPSILON;

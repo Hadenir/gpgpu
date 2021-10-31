@@ -18,7 +18,15 @@ namespace gfx
 
     Renderer::~Renderer()
     {
+        cudaFree(_framebuffer);
+    }
 
+    float4* Renderer::get_framebuffer()
+    {
+        if(_framebuffer == nullptr)
+            allocate_framebuffer();
+
+        return _framebuffer;
     }
 
     void Renderer::clear()
@@ -27,13 +35,16 @@ namespace gfx
         glClear(GL_COLOR_BUFFER_BIT);
     }
 
-    void Renderer::blit(const float4* pixels)
+    void Renderer::blit()
     {
         size_t num_bytes = _width * _height * sizeof(float4);
         cudaArray_t texture_ptr;
         CUDA_CHECK(cudaGraphicsMapResources(1, &_cuda_resource));
         CUDA_CHECK(cudaGraphicsSubResourceGetMappedArray(&texture_ptr, _cuda_resource, 0, 0));
-        CUDA_CHECK(cudaMemcpyToArray(texture_ptr, 0, 0, pixels, num_bytes, cudaMemcpyDeviceToDevice));
+
+        CUDA_CHECK(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaMemcpyToArray(texture_ptr, 0, 0, _framebuffer, num_bytes, cudaMemcpyDeviceToDevice));
+
         CUDA_CHECK(cudaGraphicsUnmapResources(1, &_cuda_resource));
     }
 
@@ -120,6 +131,13 @@ namespace gfx
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
         glEnableVertexAttribArray(1);
+    }
+
+    void Renderer::allocate_framebuffer()
+    {
+        int num_texels = _width * _height;
+        int num_bytes = num_texels * sizeof(float4);
+        CUDA_CHECK(cudaMalloc(&_framebuffer, num_bytes));
     }
 
     const std::string Renderer::VERTEX_SHADER_SOURCE =
