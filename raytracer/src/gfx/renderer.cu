@@ -4,7 +4,7 @@
 #include <cuda_gl_interop.h>
 
 #include "renderer.cuh"
-#include "../cuda_helpers.cuh"
+#include "../utils.cuh"
 
 namespace gfx
 {

@@ -25,6 +25,11 @@ namespace gfx
         glfwSetWindowUserPointer(_window, this);
         glfwSetErrorCallback(on_error);
         glfwSetFramebufferSizeCallback(_window, on_size_changed);
+        glfwSetCursorPosCallback(_window, on_mouse_moved);
+        glfwSetMouseButtonCallback(_window, on_mouse_button);
+
+        if (glfwRawMouseMotionSupported())
+            glfwSetInputMode(_window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
 
         glfwMakeContextCurrent(_window);
 
@@ -47,6 +52,17 @@ namespace gfx
         glfwPollEvents();
     }
 
+    void Display::get_cursor_pos(float& x, float& y) const
+    {
+        x = _mouse_x;
+        y = _mouse_y;
+    }
+
+    bool Display::is_dragging() const
+    {
+        return _dragging;
+    }
+
     void Display::on_error(int error_code, const char* error_message)
     {
         std::stringstream ss;
@@ -56,10 +72,28 @@ namespace gfx
 
     void Display::on_size_changed(GLFWwindow* window, int new_width, int new_height)
     {
-        auto display = get_display_for_window(window);
+        auto& display = get_display_for_window(window);
         display._width = new_width;
         display._height = new_height;
 
         glViewport(0, 0, new_width, new_height);
+    }
+
+    void Display::on_mouse_moved(GLFWwindow* window, double x_pos, double y_pos)
+    {
+        auto& display = get_display_for_window(window);
+        display._mouse_x = (float)x_pos;
+        display._mouse_y = (float)y_pos;
+    }
+
+    void Display::on_mouse_button(GLFWwindow* window, int button, int action, int mods)
+    {
+        auto& display = get_display_for_window(window);
+        if(button != GLFW_MOUSE_BUTTON_LEFT) return;
+
+        if(action == GLFW_PRESS)
+            display._dragging = true;
+        else
+            display._dragging = false;
     }
 }

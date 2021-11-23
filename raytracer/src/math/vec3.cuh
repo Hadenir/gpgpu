@@ -44,6 +44,7 @@ namespace math
 
         __host__ __device__ inline static Vec3 zero() { return Vec3(0.0f, 0.0f, 0.0f); }
         __host__ __device__ inline static Vec3 one() { return Vec3(1.0f, 1.0f, 1.0f); }
+        __host__ __device__ inline static Vec3 up() { return Vec3(0.0f, 1.0f, 0.0f); }
 
     private:
         const float EPSILON = FLT_EPSILON;
