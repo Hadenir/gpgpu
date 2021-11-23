@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cstdint>
+#include <curand.h>
 
 #include "utils.cuh"
 #include "gfx/display.cuh"
@@ -9,18 +10,43 @@
 #include "math/ray.cuh"
 #include "objects/render_list.cuh"
 #include "objects/sphere.cuh"
+#include "objects/light_source.cuh"
 
 using namespace gfx;
 using namespace math;
 using namespace obj;
 typedef unsigned int uint;
 
-__device__ Vec3 calculate_color(const Ray& ray, RenderObject* world)
+__host__ __device__ const LIGHTS_COUNT = 100;
+__host__ __device__ const SPHERES_COUNT = 100;
+
+__device__ Vec3 calculate_color(const Ray& ray, RenderObject* world, LightSource* lights, const Vec3& camera_position)
 {
+    float k_s = 0.2f;
+    float k_d = 0.9f;
+    float k_a = 0.1f;
+    float alpha = 100.0f;
+    Vec3 ambient(0.1f, 0.1f, 0.1f);
+
     HitResult result;
     if(world->hit(ray, 0.0f, FLT_MAX, result))
     {
-        return 0.5f * (result.normal + Vec3::one());
+        LightSource& light = lights[0];
+        auto N = result.normal;
+        auto L_m = (light.position() - result.hit_point).normalized(); // direction from surface to light
+        auto R_m = 2.0f * L_m.dot(N) * N - L_m; // direction of perfectly reflected ray
+        auto V = (camera_position - result.hit_point).normalized(); // direction from surface to the camera
+
+        auto light_color = k_a * ambient;
+        auto diffuse_intensity = L_m.dot(N);
+        if(diffuse_intensity > 0)
+            light_color += k_d * diffuse_intensity * light.color();
+        auto specular_intensity = R_m.dot(V);
+        if(specular_intensity > 0)
+            light_color += k_s * powf(specular_intensity, alpha) * light.color();
+
+        auto color = (light_color * result.color).clamp();
+        return color;
     }
     else
     {
@@ -30,20 +56,26 @@ __device__ Vec3 calculate_color(const Ray& ray, RenderObject* world)
     }
 }
 
-__global__ void create_world(RenderObject** world)
+__global__ void create_world(RenderObject** world, LightSource* lights)
 {
     if(threadIdx.x == 0 && blockIdx.x == 0)
     {
-        RenderObject** objects = new RenderObject*[3];
-        objects[0] = new Sphere(Vec3(1.0f, 0.0f, -1.0f), 0.5f);
-        objects[1] = new Sphere(Vec3(-1.0f, 0.0f, -1.0f), 0.5f);
-        objects[2] = new Sphere(Vec3(0, -100.5f, -1.0f), 100.0f);
+        RenderObject** objects = new RenderObject*[SPHERES_COUNT];
+        for(int i = 0; i < SPHERES_COUNT; i++)
+        {
+            objects[i]
+        }
+        // objects[0] = new Sphere(Vec3(1.0f, 0.0f, -1.0f), 0.5f, Vec3(1.0f, 0.0f, 0.0f));
+        // objects[1] = new Sphere(Vec3(-1.0f, 0.0f, -1.0f), 0.5f, Vec3(0.0f, 0.0f, 1.0f));
+        // objects[2] = new Sphere(Vec3(0, -100.5f, -1.0f), 100.0f, Vec3(0.3f, 0.3f, 0.3f));
 
         *world = new RenderList(objects, 3);
+
+        lights[0] = LightSource(Vec3(0.0f, 10.0f, -1.0f), Vec3::one());
     }
 }
 
-__global__ void render(RenderObject** world, Camera camera, int width, int height, float4* pixels)
+__global__ void render(RenderObject** world, LightSource* lights, Camera camera, int width, int height, float4* pixels)
 {
     uint x = blockIdx.x * blockDim.x + threadIdx.x;
     uint y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -53,12 +85,14 @@ __global__ void render(RenderObject** world, Camera camera, int width, int heigh
     float v = float(y) / float(height - 1);
     Ray ray = camera.calculate_ray(u, v);
 
-    Vec3 col = calculate_color(ray, *world);
+    Vec3 col = calculate_color(ray, *world, lights, camera.position());
 
     pixels[x + y * width].x = col.r();
     pixels[x + y * width].y = col.g();
     pixels[x + y * width].z = col.b();
 }
+
+// TODO(KB): Free device memory
 
 dim3 calculate_grid_size(int width, int height, dim3 block_size)
 {
@@ -83,8 +117,10 @@ int main(int argc, char* argv[])
     dim3 grid_size = calculate_grid_size(resolution_width, resolution_height, block_size);
 
     RenderObject** world;
+    LightSource* lights;
     CUDA_CHECK(cudaMalloc(&world, sizeof(RenderObject*)));
-    create_world<<<1, 1>>>(world);
+    CUDA_CHECK(cudaMalloc(&lights, sizeof(LightSource)));
+    create_world<<<1, 1>>>(world, lights);
     CUDA_CHECK(cudaDeviceSynchronize());
 
     Camera camera(3, Vec3(0, 0, -1), 90, (float)resolution_width / resolution_height);
@@ -105,7 +141,7 @@ int main(int argc, char* argv[])
         renderer.clear();
 
         float4* framebuffer = renderer.get_framebuffer();
-        render<<<grid_size, block_size>>>(world, camera, resolution_width, resolution_height, framebuffer);
+        render<<<grid_size, block_size>>>(world, lights, camera, resolution_width, resolution_height, framebuffer);
         CUDA_CHECK(cudaDeviceSynchronize());
 
         renderer.blit();

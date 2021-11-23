@@ -23,6 +23,11 @@ namespace math
         return Vec3(_v[0] - other._v[0], _v[1] - other._v[1], _v[2] - other._v[2]);
     }
 
+    __host__ __device__ Vec3 Vec3::operator*(const Vec3& other) const
+    {
+        return Vec3(_v[0] * other._v[0], _v[1] * other._v[1], _v[2] * other._v[2]);
+    }
+
     __host__ __device__ Vec3& Vec3::operator+=(const Vec3& other)
     {
         _v[0] += other._v[0];
@@ -36,6 +41,14 @@ namespace math
         _v[0] -= other._v[0];
         _v[1] -= other._v[1];
         _v[2] -= other._v[2];
+        return *this;
+    }
+
+    __host__ __device__ Vec3& Vec3::operator*=(const Vec3& other)
+    {
+        _v[0] *= other._v[0];
+        _v[1] *= other._v[1];
+        _v[2] *= other._v[2];
         return *this;
     }
 
@@ -109,6 +122,17 @@ namespace math
         if(len == 0) return *this;
 
         return Vec3(_v[0] / len, _v[1] / len, _v[2] / len);
+    }
+
+    __host__ __device__ Vec3& Vec3::clamp()
+    {
+        for(int i = 0; i < 3; i++)
+        {
+            if(_v[i] < 0) _v[i] = 0.0f;
+            if(_v[i] > 1) _v[i] = 1.0f;
+        }
+
+        return *this;
     }
 
     __host__ __device__ Vec3 operator*(float coeff, const Vec3& vec)

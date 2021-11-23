@@ -10,7 +10,8 @@ namespace obj
     {
     public:
         __device__ Sphere() {}
-        __device__ Sphere(Vec3 center, float radius) : _center(center), _radius(radius) {}
+        __device__ Sphere(Vec3 center, float radius, Vec3 color)
+            : _center(center), _radius(radius), _color(color) {}
 
         __device__ inline Vec3& center() { return _center; }
         __device__ inline const Vec3& center() const { return _center; }
@@ -21,5 +22,6 @@ namespace obj
     private:
         Vec3 _center;
         float _radius;
+        Vec3 _color;
     };
 }

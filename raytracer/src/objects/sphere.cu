@@ -19,6 +19,7 @@ namespace obj
                 result.t = t;
                 result.hit_point = hit_point;
                 result.normal = (hit_point - _center) / _radius;
+                result.color = _color;
                 return true;
             }
 
@@ -29,6 +30,7 @@ namespace obj
                 result.t = t;
                 result.hit_point = hit_point;
                 result.normal = (hit_point - _center) / _radius;
+                result.color = _color;
                 return true;
             }
         }

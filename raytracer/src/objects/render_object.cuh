@@ -9,6 +9,7 @@ namespace obj
         float t;
         math::Vec3 hit_point;
         math::Vec3 normal;
+        math::Vec3 color;
     };
 
     class RenderObject
