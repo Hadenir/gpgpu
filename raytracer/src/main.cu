@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cstdint>
 #include <curand.h>
+#include <curand_kernel.h>
 
 #include "utils.cuh"
 #include "gfx/display.cuh"
@@ -17,10 +18,10 @@ using namespace math;
 using namespace obj;
 typedef unsigned int uint;
 
-__host__ __device__ const LIGHTS_COUNT = 100;
-__host__ __device__ const SPHERES_COUNT = 100;
+__device__ const int LIGHTS_COUNT = 10;
+__device__ const int SPHERES_COUNT = 1000;
 
-__device__ Vec3 calculate_color(const Ray& ray, RenderObject* world, LightSource* lights, const Vec3& camera_position)
+__device__ Vec3 calculate_color(const Ray& ray, RenderList* world, LightSource* lights, const Vec3& camera_position)
 {
     float k_s = 0.2f;
     float k_d = 0.9f;
@@ -56,43 +57,69 @@ __device__ Vec3 calculate_color(const Ray& ray, RenderObject* world, LightSource
     }
 }
 
-__global__ void create_world(RenderObject** world, LightSource* lights)
+__global__ void init_curand(unsigned int seed, curandState_t* states)
 {
-    if(threadIdx.x == 0 && blockIdx.x == 0)
+    curand_init(seed, blockIdx.x, 0, states + blockIdx.x);
+}
+
+__global__ void create_objects(RenderObject** objects, LightSource* lights, RenderList* world, curandState_t* states)
+{
+    int i = threadIdx.x + blockDim.x * blockIdx.x;
+
+    if(i == 0)
+        new (world) RenderList(objects, SPHERES_COUNT);
+    if(i < SPHERES_COUNT)
     {
-        RenderObject** objects = new RenderObject*[SPHERES_COUNT];
-        for(int i = 0; i < SPHERES_COUNT; i++)
-        {
-            objects[i]
-        }
-        // objects[0] = new Sphere(Vec3(1.0f, 0.0f, -1.0f), 0.5f, Vec3(1.0f, 0.0f, 0.0f));
-        // objects[1] = new Sphere(Vec3(-1.0f, 0.0f, -1.0f), 0.5f, Vec3(0.0f, 0.0f, 1.0f));
-        // objects[2] = new Sphere(Vec3(0, -100.5f, -1.0f), 100.0f, Vec3(0.3f, 0.3f, 0.3f));
+        auto position = Vec3(
+            curand_normal(states + i) * 20 - 10,
+            curand_normal(states + i) * 20 - 10,
+            curand_normal(states + i) * 20 - 10
+        );
 
-        *world = new RenderList(objects, 3);
+        auto color = Vec3(
+            curand_normal(states + i),
+            curand_normal(states + i),
+            curand_normal(states + i)
+        );
 
-        lights[0] = LightSource(Vec3(0.0f, 10.0f, -1.0f), Vec3::one());
+        objects[i] = new Sphere(position, curand_normal(states + i), color);
+    }
+    if(i < LIGHTS_COUNT)
+    {
+        auto position = Vec3(
+            curand_normal(states + i) * 6 - 3,
+            curand_normal(states + i) * 6 - 3,
+            curand_normal(states + i) * 6 - 3
+        );
+
+        new (lights + i) LightSource(position, Vec3::one());
     }
 }
 
-__global__ void render(RenderObject** world, LightSource* lights, Camera camera, int width, int height, float4* pixels)
+__global__ void free_objects(RenderObject** objects)
+{
+    int i = threadIdx.x + blockDim.x * blockIdx.x;
+    if(i < SPHERES_COUNT)
+        delete objects[i];
+}
+
+__global__ void render(RenderList* world, LightSource* lights, Camera camera, int width, int height, float4* pixels)
 {
     uint x = blockIdx.x * blockDim.x + threadIdx.x;
     uint y = blockIdx.y * blockDim.y + threadIdx.y;
+
     if(x >= width || y >= height) return;
 
     float u = float(x) / float(width - 1);
     float v = float(y) / float(height - 1);
     Ray ray = camera.calculate_ray(u, v);
 
-    Vec3 col = calculate_color(ray, *world, lights, camera.position());
+    Vec3 col = calculate_color(ray, world, lights, camera.position());
 
     pixels[x + y * width].x = col.r();
     pixels[x + y * width].y = col.g();
     pixels[x + y * width].z = col.b();
 }
-
-// TODO(KB): Free device memory
 
 dim3 calculate_grid_size(int width, int height, dim3 block_size)
 {
@@ -116,11 +143,21 @@ int main(int argc, char* argv[])
     dim3 block_size(32, 32);
     dim3 grid_size = calculate_grid_size(resolution_width, resolution_height, block_size);
 
-    RenderObject** world;
+    const int N = max(SPHERES_COUNT, LIGHTS_COUNT);
+    curandState_t* curand_states;
+    CUDA_CHECK(cudaMalloc(&curand_states, N * sizeof(curandState_t)));
+    init_curand<<<N, 1>>>(time(0), curand_states);
+    CUDA_CHECK(cudaDeviceSynchronize());
+
+    RenderList* world;
+    RenderObject** objects;
     LightSource* lights;
-    CUDA_CHECK(cudaMalloc(&world, sizeof(RenderObject*)));
-    CUDA_CHECK(cudaMalloc(&lights, sizeof(LightSource)));
-    create_world<<<1, 1>>>(world, lights);
+    CUDA_CHECK(cudaMalloc(&world, sizeof(RenderList)));
+    CUDA_CHECK(cudaMalloc(&objects, SPHERES_COUNT * sizeof(RenderObject*)));
+    CUDA_CHECK(cudaMalloc(&lights, LIGHTS_COUNT * sizeof(LightSource)));
+    dim3 block_size2(32, 1);
+    dim3 grid_size2 = calculate_grid_size(N, 1, block_size2);
+    create_objects<<<grid_size2, block_size2>>>(objects, lights, world, curand_states);
     CUDA_CHECK(cudaDeviceSynchronize());
 
     Camera camera(3, Vec3(0, 0, -1), 90, (float)resolution_width / resolution_height);
@@ -148,6 +185,12 @@ int main(int argc, char* argv[])
         renderer.draw();
         display.show();
     }
+
+    free_objects<<<grid_size2, block_size2>>>(objects);
+    CUDA_CHECK(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaFree(world));
+    CUDA_CHECK(cudaFree(objects));
+    CUDA_CHECK(cudaFree(lights));
 
     return 0;
 }

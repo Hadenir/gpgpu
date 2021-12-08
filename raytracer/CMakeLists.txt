@@ -17,3 +17,7 @@ target_link_libraries(raytracer glad OpenGL::GL glfw)
 set_target_properties(raytracer PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin/${CMAKE_BUILD_TYPE}/
 )
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_options(raytracer PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-G>)
+endif()
