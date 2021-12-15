@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../math/ray.cuh"
+#include "../math/aabb.cuh"
 
 namespace obj
 {
@@ -16,5 +17,10 @@ namespace obj
     {
     public:
         __device__ virtual bool hit(const math::Ray& ray, float t_min, float t_max, HitResult& result) const = 0;
+
+        __device__ virtual bool bounding_box(math::AABB& result) const = 0;
+
+    protected:
+        __device__ math::AABB surrounding_box(const math::AABB& box1, const math::AABB& box2) const;
     };
 }

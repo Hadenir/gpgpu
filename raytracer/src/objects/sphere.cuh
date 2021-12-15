@@ -17,7 +17,8 @@ namespace obj
         __device__ inline const Vec3& center() const { return _center; }
         __device__ inline float radius() {return _radius; }
 
-        __device__ virtual bool hit(const Ray& ray, float t_min, float t_max, HitResult& result) const;
+        __device__ bool hit(const Ray& ray, float t_min, float t_max, HitResult& result) const override;
+        __device__ bool bounding_box(AABB& result) const override;
 
     private:
         Vec3 _center;

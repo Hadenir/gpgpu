@@ -37,4 +37,13 @@ namespace obj
 
         return false;
     }
+
+    __device__ bool Sphere::bounding_box(AABB& result) const
+    {
+        result = AABB(
+            _center - Vec3(_radius, _radius, _radius),
+            _center + Vec3(_radius, _radius, _radius)
+        );
+        return true;
+    }
 }

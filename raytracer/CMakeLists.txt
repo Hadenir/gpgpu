@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0.0)
+cmake_minimum_required(VERSION 3.17.0)
 project(raytracer VERSION 0.1.0 LANGUAGES CUDA CXX)
 
 set(CMAKE_CUDA_ARCHITECTURES "60;70;75;80;")
