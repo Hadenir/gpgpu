@@ -12,6 +12,7 @@
 #include "objects/render_list.cuh"
 #include "objects/sphere.cuh"
 #include "objects/light_source.cuh"
+#include "objects/bvh_node.cuh"
 
 using namespace gfx;
 using namespace math;
@@ -19,9 +20,9 @@ using namespace obj;
 typedef unsigned int uint;
 
 __device__ const int LIGHTS_COUNT = 10;
-__device__ const int SPHERES_COUNT = 1000;
+__device__ const int SPHERES_COUNT = 100;
 
-__device__ Vec3 calculate_color(const Ray& ray, RenderList* world, LightSource* lights, const Vec3& camera_position)
+__device__ Vec3 calculate_color(const Ray& ray, BvhNode* world, LightSource* lights, const Vec3& camera_position)
 {
     float k_s = 0.2f;
     float k_d = 0.9f;
@@ -62,12 +63,10 @@ __global__ void init_curand(unsigned int seed, curandState_t* states)
     curand_init(seed, blockIdx.x, 0, states + blockIdx.x);
 }
 
-__global__ void create_objects(RenderObject** objects, LightSource* lights, RenderList* world, curandState_t* states)
+__global__ void create_objects(RenderObject** objects, LightSource* lights, curandState_t* states)
 {
     int i = threadIdx.x + blockDim.x * blockIdx.x;
 
-    if(i == 0)
-        new (world) RenderList(objects, SPHERES_COUNT);
     if(i < SPHERES_COUNT)
     {
         auto position = Vec3(
@@ -96,14 +95,17 @@ __global__ void create_objects(RenderObject** objects, LightSource* lights, Rend
     }
 }
 
-__global__ void free_objects(RenderObject** objects)
+__global__ void create_bvh(RenderObject** objects, BvhNode* world, curandState_t* states)
 {
-    int i = threadIdx.x + blockDim.x * blockIdx.x;
-    if(i < SPHERES_COUNT)
-        delete objects[i];
+    new (world) BvhNode(objects, 0, SPHERES_COUNT, states);
 }
 
-__global__ void render(RenderList* world, LightSource* lights, Camera camera, int width, int height, float4* pixels)
+__global__ void free_bvh(BvhNode* world)
+{
+    delete world;
+}
+
+__global__ void render(BvhNode* world, LightSource* lights, Camera camera, int width, int height, float4* pixels)
 {
     uint x = blockIdx.x * blockDim.x + threadIdx.x;
     uint y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -146,18 +148,23 @@ int main(int argc, char* argv[])
     const int N = max(SPHERES_COUNT, LIGHTS_COUNT);
     curandState_t* curand_states;
     CUDA_CHECK(cudaMalloc(&curand_states, N * sizeof(curandState_t)));
-    init_curand<<<N, 1>>>(time(0), curand_states);
+    init_curand<<<N, 1>>>((unsigned int)time(0), curand_states);
     CUDA_CHECK(cudaDeviceSynchronize());
 
-    RenderList* world;
+    BvhNode* world;
     RenderObject** objects;
     LightSource* lights;
-    CUDA_CHECK(cudaMalloc(&world, sizeof(RenderList)));
+    CUDA_CHECK(cudaMalloc(&world, sizeof(BvhNode)));
     CUDA_CHECK(cudaMalloc(&objects, SPHERES_COUNT * sizeof(RenderObject*)));
     CUDA_CHECK(cudaMalloc(&lights, LIGHTS_COUNT * sizeof(LightSource)));
+
+    std::cout << world << "/" << objects << "/" << lights << std::endl;
+
     dim3 block_size2(32, 1);
     dim3 grid_size2 = calculate_grid_size(N, 1, block_size2);
-    create_objects<<<grid_size2, block_size2>>>(objects, lights, world, curand_states);
+    create_objects<<<grid_size2, block_size2>>>(objects, lights, curand_states);
+    CUDA_CHECK(cudaDeviceSynchronize());
+    create_bvh<<<1, 1>>>(objects, world, curand_states);
     CUDA_CHECK(cudaDeviceSynchronize());
 
     Camera camera(3, Vec3(0, 0, -1), 90, (float)resolution_width / resolution_height);
@@ -188,10 +195,11 @@ int main(int argc, char* argv[])
         renderer.draw();
         display.show();
     }
+    CUDA_CHECK(cudaStreamDestroy(stream));
 
-    free_objects<<<grid_size2, block_size2>>>(objects);
+    free_bvh<<<1, 1>>>(world);
     CUDA_CHECK(cudaDeviceSynchronize());
-    CUDA_CHECK(cudaFree(world));
+    CUDA_CHECK(cudaFree(curand_states));
     CUDA_CHECK(cudaFree(objects));
     CUDA_CHECK(cudaFree(lights));
 

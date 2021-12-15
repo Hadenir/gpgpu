@@ -16,6 +16,8 @@ namespace obj
     class RenderObject
     {
     public:
+        __device__ virtual ~RenderObject() {}
+
         __device__ virtual bool hit(const math::Ray& ray, float t_min, float t_max, HitResult& result) const = 0;
 
         __device__ virtual bool bounding_box(math::AABB& result) const = 0;

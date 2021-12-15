@@ -5,6 +5,8 @@ set(CMAKE_CUDA_ARCHITECTURES "60;70;75;80;")
 find_package(CUDA 11 REQUIRED)
 find_package(OpenGL REQUIRED)
 
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -lineinfo")
+
 add_subdirectory(thirdparty/glad)
 add_subdirectory(thirdparty/glfw3)
 

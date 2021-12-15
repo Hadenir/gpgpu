@@ -2,6 +2,12 @@
 
 namespace obj
 {
+    __device__ BvhNode::~BvhNode()
+    {
+        delete _left;
+        delete _right;
+    }
+
     __device__ bool BvhNode::hit(const math::Ray& ray, float t_min, float t_max, HitResult& result) const
     {
         if(!_aabb.hit(ray, t_min, t_max)) return false;
@@ -19,15 +25,15 @@ namespace obj
     }
 
 
-    __device__ BvhNode::BvhNode(RenderObject** objects, size_t start, size_t end, curandState_t* curandState)
+    __device__ BvhNode::BvhNode(RenderObject** objects, int start, int end, curandState_t* curandState)
     {
         float rnum = curand_uniform(curandState);
         int axis = rnum < 0.3 ? 0
-                        : rnum < 0.6 ? 1
-                        : 2;
+                 : rnum < 0.6 ? 1
+                 : 2;
 
         size_t span = end - start;
-        if(span == 1)
+        if(span < 2)
         {
             _left = objects[start];
             _right = objects[start];
@@ -60,18 +66,20 @@ namespace obj
         _aabb = surrounding_box(box_left, box_right);
     }
 
-    __device__ void BvhNode::sort(RenderObject** objects, size_t start, size_t end, int axis)
+    __device__ void BvhNode::sort(RenderObject** objects, int start, int end, int axis)
     {
-        for(int i = start; i < end; i++)
+        if(start == end) return;
+
+        for(int i = start + 1; i < end; i++)
         {
-            int j = i;
-            while(j > start && compare(objects[j - 1], objects[j], axis))
+            RenderObject* x = objects[i];
+            int j = i - 1;
+            while(j >= start && compare(objects[j], x, axis))
             {
-                RenderObject* tmp = objects[j - 1];
-                objects[j - 1] = objects[j];
-                objects[j] = tmp;
+                objects[j+1] = objects[j];
                 j--;
             }
+            objects[j+1] = x;
         }
     }
 
