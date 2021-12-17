@@ -162,6 +162,12 @@ int main(int argc, char* argv[])
 
     Camera camera(3, Vec3(0, 0, -1), 90, (float)resolution_width / resolution_height);
     float mouse_x = 0, mouse_y = 0;
+    cudaStream_t stream;
+    CUDA_CHECK(cudaStreamCreate(&stream));
+    cudaEvent_t start, end;
+    CUDA_CHECK(cudaEventCreate(&start));
+    CUDA_CHECK(cudaEventCreate(&end));
+    float elapsedTime = 0;
     while(!display.should_close())
     {
         float new_mouse_x, new_mouse_y;
@@ -177,9 +183,16 @@ int main(int argc, char* argv[])
 
         renderer.clear();
 
+        cudaEventRecord(start, 0);
+
         float4* framebuffer = renderer.get_framebuffer();
         render<<<grid_size, block_size>>>(world, lights, camera, resolution_width, resolution_height, framebuffer);
         CUDA_CHECK(cudaDeviceSynchronize());
+
+        cudaEventRecord(end, 0);
+        cudaEventSynchronize(end);
+        cudaEventElapsedTime(&elapsedTime, start, end);
+        std::cout << elapsedTime << "ms" << std::endl;
 
         renderer.blit();
         renderer.draw();
