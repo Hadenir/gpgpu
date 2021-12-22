@@ -18,10 +18,10 @@ using namespace math;
 using namespace obj;
 typedef unsigned int uint;
 
-__device__ const int LIGHTS_COUNT = 3;
-__device__ const int SPHERES_COUNT = 50;
+const int LIGHTS_COUNT = 3;
+const int SPHERES_COUNT = 50;
 
-__device__ Vec3 calculate_color(const Ray& ray, RenderList* world, LightSource* lights, const Vec3& camera_position)
+Vec3 calculate_color(const Ray& ray, RenderList* world, LightSource* lights, const Vec3& camera_position)
 {
     float k_s = 0.4f;
     float k_d = 0.9f;
@@ -60,76 +60,58 @@ __device__ Vec3 calculate_color(const Ray& ray, RenderList* world, LightSource* 
     }
 }
 
-__global__ void init_curand(unsigned int seed, curandState_t* states)
+void create_objects(RenderObject** objects, LightSource* lights, RenderList* world)
 {
-    curand_init(seed, blockIdx.x, 0, states + blockIdx.x);
-}
-
-__global__ void create_objects(RenderObject** objects, LightSource* lights, RenderList* world, curandState_t* states)
-{
-    int i = threadIdx.x + blockDim.x * blockIdx.x;
-
-    if(i == 0)
-        new (world) RenderList(objects, SPHERES_COUNT);
-    if(i < SPHERES_COUNT)
+    for(int i = 0; i < SPHERES_COUNT; i++)
     {
-        auto position = Vec3(
-            curand_normal(states + i) * 20 - 10,
-            curand_normal(states + i) * 20 - 10,
-            curand_normal(states + i) * 20 - 10
-        );
+        if(i == 0)
+            new (world) RenderList(objects, SPHERES_COUNT);
+        if(i < SPHERES_COUNT)
+        {
+            auto position = Vec3(
+                (float)rand() / RAND_MAX * 20 - 10,
+                (float)rand() / RAND_MAX * 20 - 10,
+                (float)rand() / RAND_MAX * 20 - 10
+            );
 
-        auto color = Vec3(
-            curand_normal(states + i),
-            curand_normal(states + i),
-            curand_normal(states + i)
-        );
+            auto color = Vec3(
+                (float)rand() / RAND_MAX,
+                (float)rand() / RAND_MAX,
+                (float)rand() / RAND_MAX
+            );
 
-        objects[i] = new Sphere(position, curand_normal(states + i), color);
-    }
-    if(i < LIGHTS_COUNT)
-    {
-        auto position = Vec3(
-            curand_normal(states + i) * 6 - 3,
-            curand_normal(states + i) * 6 - 3,
-            curand_normal(states + i) * 6 - 3
-        );
+            objects[i] = new Sphere(position, (float)rand() / RAND_MAX, color);
+        }
+        if(i < LIGHTS_COUNT)
+        {
+            auto position = Vec3(
+                (float)rand() / RAND_MAX * 6 - 3,
+                (float)rand() / RAND_MAX * 6 - 3,
+                (float)rand() / RAND_MAX * 6 - 3
+            );
 
-        new (lights + i) LightSource(position, Vec3::one());
+            new (lights + i) LightSource(position, Vec3::one());
+        }
     }
 }
 
-__global__ void free_objects(RenderObject** objects)
+void render(RenderList* world, LightSource* lights, Camera camera, int width, int height, float4* pixels)
 {
-    int i = threadIdx.x + blockDim.x * blockIdx.x;
-    if(i < SPHERES_COUNT)
-        delete objects[i];
-}
+    for(uint y = 0; y < height; y++)
+    {
+        for(uint x = 0; x < width; x++)
+        {
+            float u = float(x) / float(width - 1);
+            float v = float(y) / float(height - 1);
+            Ray ray = camera.calculate_ray(u, v);
 
-__global__ void render(RenderList* world, LightSource* lights, Camera camera, int width, int height, float4* pixels)
-{
-    uint x = blockIdx.x * blockDim.x + threadIdx.x;
-    uint y = blockIdx.y * blockDim.y + threadIdx.y;
+            Vec3 col = calculate_color(ray, world, lights, camera.position());
 
-    if(x >= width || y >= height) return;
-
-    float u = float(x) / float(width - 1);
-    float v = float(y) / float(height - 1);
-    Ray ray = camera.calculate_ray(u, v);
-
-    Vec3 col = calculate_color(ray, world, lights, camera.position());
-
-    pixels[x + y * width].x = col.r();
-    pixels[x + y * width].y = col.g();
-    pixels[x + y * width].z = col.b();
-}
-
-dim3 calculate_grid_size(int width, int height, dim3 block_size)
-{
-    return dim3(
-        width / block_size.x + (width % block_size.x == 0 ? 0 : 1),
-        height / block_size.y + (height % block_size.y == 0 ? 0 : 1)
-    );
+            pixels[x + y * width].x = col.r();
+            pixels[x + y * width].y = col.g();
+            pixels[x + y * width].z = col.b();
+        }
+    }
 }
 
 int main(int argc, char* argv[])
@@ -143,34 +125,31 @@ int main(int argc, char* argv[])
     Display display(window_title, window_width, window_height);
     Renderer renderer(resolution_width, resolution_height);
 
-    dim3 block_size(32, 32);
-    dim3 grid_size = calculate_grid_size(resolution_width, resolution_height, block_size);
-
-    const int N = max(SPHERES_COUNT, LIGHTS_COUNT);
-    curandState_t* curand_states;
-    CUDA_CHECK(cudaMalloc(&curand_states, N * sizeof(curandState_t)));
-    init_curand<<<N, 1>>>(time(0), curand_states);
-    CUDA_CHECK(cudaDeviceSynchronize());
+    // const int N = max(SPHERES_COUNT, LIGHTS_COUNT);
+    // curandState_t* curand_states;
+    // CUDA_CHECK(cudaMalloc(&curand_states, N * sizeof(curandState_t)));
+    // init_curand<<<N, 1>>>(time(0), curand_states);
+    // CUDA_CHECK(cudaDeviceSynchronize());
 
     RenderList* world;
     RenderObject** objects;
     LightSource* lights;
-    CUDA_CHECK(cudaMalloc(&world, sizeof(RenderList)));
-    CUDA_CHECK(cudaMalloc(&objects, SPHERES_COUNT * sizeof(RenderObject*)));
-    CUDA_CHECK(cudaMalloc(&lights, LIGHTS_COUNT * sizeof(LightSource)));
-    dim3 block_size2(32, 1);
-    dim3 grid_size2 = calculate_grid_size(N, 1, block_size2);
-    create_objects<<<grid_size2, block_size2>>>(objects, lights, world, curand_states);
-    CUDA_CHECK(cudaDeviceSynchronize());
+    // CUDA_CHECK(cudaMalloc(&world, sizeof(RenderList)));
+    // CUDA_CHECK(cudaMalloc(&objects, SPHERES_COUNT * sizeof(RenderObject*)));
+    // CUDA_CHECK(cudaMalloc(&lights, LIGHTS_COUNT * sizeof(LightSource)));
+    // dim3 block_size2(32, 1);
+    // dim3 grid_size2 = calculate_grid_size(N, 1, block_size2);
+    // create_objects<<<grid_size2, block_size2>>>(objects, lights, world, curand_states);
+    // CUDA_CHECK(cudaDeviceSynchronize());
+    world = (RenderList*)malloc(sizeof(RenderList));
+    objects = (RenderObject**)malloc(SPHERES_COUNT * sizeof(RenderObject*));
+    lights = (LightSource*)malloc(LIGHTS_COUNT * sizeof(LightSource));
+    create_objects(objects, lights, world);
 
     Camera camera(3, Vec3(0, 0, -1), 90, (float)resolution_width / resolution_height);
     float mouse_x = 0, mouse_y = 0;
-    cudaStream_t stream;
-    CUDA_CHECK(cudaStreamCreate(&stream));
-    cudaEvent_t start, end;
-    CUDA_CHECK(cudaEventCreate(&start));
-    CUDA_CHECK(cudaEventCreate(&end));
-    float elapsedTime = 0;
+    clock_t elapsedTime = 0;
+    float4* cpu_framebuffer = new float4[window_width * window_height];
     while(!display.should_close())
     {
         float new_mouse_x, new_mouse_y;
@@ -186,15 +165,14 @@ int main(int argc, char* argv[])
 
         renderer.clear();
 
-        cudaEventRecord(start, 0);
-
+        clock_t start = clock() / (CLOCKS_PER_SEC / 1000);
+        render(world, lights, camera, resolution_width, resolution_height, cpu_framebuffer);
+        
         float4* framebuffer = renderer.get_framebuffer();
-        render<<<grid_size, block_size>>>(world, lights, camera, resolution_width, resolution_height, framebuffer);
-        CUDA_CHECK(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaMemcpy(framebuffer, cpu_framebuffer, window_width * window_height * sizeof(float4), cudaMemcpyHostToDevice));
 
-        cudaEventRecord(end, 0);
-        cudaEventSynchronize(end);
-        cudaEventElapsedTime(&elapsedTime, start, end);
+        clock_t end = clock() / (CLOCKS_PER_SEC / 1000);
+        elapsedTime = end - start;
         std::cout << elapsedTime << "ms" << std::endl;
 
         renderer.blit();
@@ -202,11 +180,10 @@ int main(int argc, char* argv[])
         display.show();
     }
 
-    free_objects<<<grid_size2, block_size2>>>(objects);
-    CUDA_CHECK(cudaDeviceSynchronize());
-    CUDA_CHECK(cudaFree(world));
-    CUDA_CHECK(cudaFree(objects));
-    CUDA_CHECK(cudaFree(lights));
+    free(world);
+    free(objects);
+    free(lights);
+    delete[] cpu_framebuffer;
 
     return 0;
 }

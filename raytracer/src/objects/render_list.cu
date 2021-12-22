@@ -2,7 +2,7 @@
 
 namespace obj
 {
-    __device__ bool RenderList::hit(const math::Ray& ray, float t_min, float t_max, HitResult& result) const
+    bool RenderList::hit(const math::Ray& ray, float t_min, float t_max, HitResult& result) const
     {
         HitResult temp_result;
         bool hit_anything = false;

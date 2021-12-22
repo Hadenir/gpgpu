@@ -2,7 +2,7 @@
 
 namespace obj
 {
-    __device__ bool Sphere::hit(const Ray& ray, float t_min, float t_max, HitResult& result) const
+    bool Sphere::hit(const Ray& ray, float t_min, float t_max, HitResult& result) const
     {
         Vec3 oc = ray.origin() - _center;
         float a = ray.direction().length_sq();
