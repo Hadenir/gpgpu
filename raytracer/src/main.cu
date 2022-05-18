@@ -18,33 +18,36 @@ using namespace math;
 using namespace obj;
 typedef unsigned int uint;
 
-__device__ const int LIGHTS_COUNT = 10;
-__device__ const int SPHERES_COUNT = 1000;
+__device__ const int LIGHTS_COUNT = 3;
+__device__ const int SPHERES_COUNT = 50;
 
 __device__ Vec3 calculate_color(const Ray& ray, RenderList* world, LightSource* lights, const Vec3& camera_position)
 {
-    float k_s = 0.2f;
+    float k_s = 0.4f;
     float k_d = 0.9f;
     float k_a = 0.1f;
     float alpha = 100.0f;
-    Vec3 ambient(0.1f, 0.1f, 0.1f);
+    Vec3 ambient(1, 1, 1);
 
     HitResult result;
     if(world->hit(ray, 0.0f, FLT_MAX, result))
     {
-        LightSource& light = lights[0];
-        auto N = result.normal;
-        auto L_m = (light.position() - result.hit_point).normalized(); // direction from surface to light
-        auto R_m = 2.0f * L_m.dot(N) * N - L_m; // direction of perfectly reflected ray
-        auto V = (camera_position - result.hit_point).normalized(); // direction from surface to the camera
-
         auto light_color = k_a * ambient;
-        auto diffuse_intensity = L_m.dot(N);
-        if(diffuse_intensity > 0)
-            light_color += k_d * diffuse_intensity * light.color();
-        auto specular_intensity = R_m.dot(V);
-        if(specular_intensity > 0)
-            light_color += k_s * powf(specular_intensity, alpha) * light.color();
+        for(int i = 0; i < LIGHTS_COUNT; i++)
+        {
+            LightSource& light = lights[i];
+            auto N = result.normal;
+            auto L_m = (light.position() - result.hit_point).normalized(); // direction from surface to light
+            auto R_m = 2.0f * L_m.dot(N) * N - L_m; // direction of perfectly reflected ray
+            auto V = (camera_position - result.hit_point).normalized(); // direction from surface to the camera
+
+            auto diffuse_intensity = L_m.dot(N);
+            if(diffuse_intensity > 0)
+                light_color += k_d * diffuse_intensity * light.color();
+            auto specular_intensity = R_m.dot(V);
+            if(specular_intensity > 0)
+                light_color += k_s * powf(specular_intensity, alpha) * light.color();
+        }
 
         auto color = (light_color * result.color).clamp();
         return color;
