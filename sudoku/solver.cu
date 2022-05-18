@@ -85,6 +85,7 @@ __global__ void kernel_sudoku_backtrack(
         {
             char current_empty = current_empty_indices[i];
 
+            // Jesli zadna cyfra nie dala poprawnego rozwiazania, cofamy sie (backtracking).
             if(current_board.cells[current_empty] >= 9)
             {
                 current_board.cells[current_empty] = 0;
@@ -99,7 +100,7 @@ __global__ void kernel_sudoku_backtrack(
             }
         }
 
-        if(i == current_num_empty && atomicAdd(complete, 1) == 0)
+        if(i == current_num_empty && atomicExch(complete, 1) == 0)
         {
             *result = current_board;
         }
